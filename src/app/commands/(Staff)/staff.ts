@@ -7,6 +7,7 @@ import { addRoleNameVars, defaultRoleName } from "@/util/role";
 import {
   ApplicationCommandOptionType,
   Constants,
+  DiscordAPIError,
   Guild,
   GuildMember,
   LabelBuilder,
@@ -14,9 +15,6 @@ import {
   ModalBuilder,
   PermissionFlagsBits,
   PermissionsBitField,
-  RoleEditOptions,
-  RoleFlags,
-  RoleFlagsBitField,
   TextInputBuilder,
   TextInputStyle,
 } from "discord.js";
@@ -72,7 +70,7 @@ export const command: CommandData = {
         },
         {
           name: "default_role_name",
-          type: ApplicationCommandOptionType.Role,
+          type: ApplicationCommandOptionType.String,
           description: "The default name for new roles",
         },
         // required role name
@@ -208,7 +206,23 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
       position,
       colors: getRoleColorsObj(colorResolved1, colorResolved2, holographic),
       reason: `Custom role created by ${interaction.user.username} (${interaction.user.id})`,
+    }).catch((e) => {
+      if (e instanceof DiscordAPIError && e.code === 50013) {
+        console.error(e);
+        return e;
+      }
     });
+
+    if (!role || role instanceof DiscordAPIError) {
+      return await interaction.reply({
+        flags: [MessageFlags.IsComponentsV2],
+        components: [
+          errorEmbed(
+            ":x: I do not have permission to create roles or assign the role above the color roles.",
+          ),
+        ],
+      });
+    }
 
     await interaction.member.roles.add(role.id);
 
@@ -300,5 +314,32 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
       components: [successEmbed(":white_check_mark: Edited role!")],
     });
   } else if (subcommand === "config") {
+    await interaction.deferReply();
+    const colorsEnabled = interaction.options.getBoolean("colors_enabled");
+    const roleBelowColors = interaction.options.getRole("role_below_colors");
+    const roleNamesEnabled = interaction.options.getBoolean("role_names");
+    const defaultRoleNameOption =
+      interaction.options.getString("default_role_name");
+
+    const updateData: Record<string, any> = {};
+
+    if (colorsEnabled !== null) updateData.colorsEnabled = colorsEnabled;
+    if (roleBelowColors) updateData.roleBelowColors = roleBelowColors.id;
+    if (roleNamesEnabled !== null)
+      updateData.roleNamesEnabled = roleNamesEnabled;
+    if (defaultRoleNameOption)
+      updateData.defaultRoleName = defaultRoleNameOption;
+
+    if (Object.keys(updateData).length > 0) {
+      await prisma.guild.update({
+        where: { id: interaction.guild.id },
+        data: updateData,
+      });
+    }
+
+    return await interaction.editReply({
+      flags: [MessageFlags.IsComponentsV2],
+      components: [successEmbed("Updated config!")],
+    });
   }
 };

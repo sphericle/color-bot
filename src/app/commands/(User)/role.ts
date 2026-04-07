@@ -7,6 +7,7 @@ import { addRoleNameVars, defaultRoleName } from "@/util/role";
 import {
   ApplicationCommandOptionType,
   Constants,
+  DiscordAPIError,
   Guild,
   GuildMember,
   LabelBuilder,
@@ -159,6 +160,8 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
       holographic,
     );
 
+    let replyInteraction: Pick<typeof interaction, "reply"> = interaction;
+
     if (dbGuild.roleNamesEnabled) {
       await interaction.showModal(
         new ModalBuilder()
@@ -185,31 +188,51 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
         })
         .catch(() => null);
 
-      if (submittedModalInteraction) {
-        const newName =
-          submittedModalInteraction.fields.getTextInputValue("roleNameInput");
-        if (newName)
-          roleName = addRoleNameVars(
-            newName,
-            interaction.member,
-            color1,
-            color2,
-            holographic,
-          );
-      }
+      if (!submittedModalInteraction) return;
+
+      replyInteraction = submittedModalInteraction;
+
+      const newName =
+        submittedModalInteraction.fields.getTextInputValue("roleNameInput");
+      if (newName)
+        roleName = addRoleNameVars(
+          newName,
+          interaction.member,
+          color1,
+          color2,
+          holographic,
+        );
     } // role name
 
     const position =
       (dbGuild.roleBelowColors
-        ? interaction.guild.roles.cache.get(dbGuild.roleBelowColors)?.position
+        ? (interaction.guild.roles.cache.get(dbGuild.roleBelowColors)?.position ?? -1) + 1
         : null) ?? 0;
 
-    const role = await interaction.guild.roles.create({
-      name: roleName,
-      position,
-      colors: getRoleColorsObj(colorResolved1, colorResolved2, holographic),
-      reason: `Custom role created by ${interaction.user.username} (${interaction.user.id})`,
-    });
+    const role = await interaction.guild.roles
+      .create({
+        name: roleName,
+        position,
+        colors: getRoleColorsObj(colorResolved1, colorResolved2, holographic),
+        reason: `Custom role created by ${interaction.user.username} (${interaction.user.id})`,
+      })
+      .catch((e) => {
+        if (e instanceof DiscordAPIError && e.code === 50013) {
+          console.error(e);
+          return e;
+        }
+      });
+
+    if (!role || role instanceof DiscordAPIError) {
+      return await replyInteraction.reply({
+        flags: [MessageFlags.IsComponentsV2],
+        components: [
+          errorEmbed(
+            ":x: I do not have permission to create roles or assign the role above the color roles.",
+          ),
+        ],
+      });
+    }
 
     await interaction.member.roles.add(role.id);
 
@@ -220,7 +243,7 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
       },
     });
 
-    return await interaction.reply({
+    return await replyInteraction.reply({
       flags: [MessageFlags.IsComponentsV2],
       components: [successEmbed(":white_check_mark: Role created!")],
     });
