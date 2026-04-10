@@ -5,9 +5,6 @@ CREATE TABLE "Guild" (
     "membersCanEditRoles" BOOLEAN NOT NULL DEFAULT true,
     "requiredRoleToEdit" TEXT,
     "roleBelowColors" TEXT,
-    "roleNamesEnabled" BOOLEAN NOT NULL DEFAULT true,
-    "defaultRoleName" TEXT NOT NULL DEFAULT '{username}',
-    "roleNameSuffix" TEXT NOT NULL DEFAULT '{username}',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

@@ -18,9 +18,6 @@ model Guild {
   membersCanEditRoles Boolean @default(true)
   requiredRoleToEdit String?
   roleBelowColors String?
-  roleNamesEnabled Boolean @default(true)
-  defaultRoleName String @default("{username}")
-  roleNameSuffix String @default("{username}")
 
   roles Role[]
   members Member[]

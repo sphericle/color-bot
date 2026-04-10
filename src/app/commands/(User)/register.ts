@@ -21,8 +21,9 @@ export const command: CommandData = {
 };
 
 export const chatInput: ChatInputCommand = async ({ interaction }) => {
+  await interaction.deferReply();
   if (!interaction.guild) {
-    return await interaction.reply({
+    return await interaction.editReply({
       components: [
         errorEmbed(":x: This command can only be used in a server."),
       ],
@@ -31,7 +32,7 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
   }
   const { prisma } = await import("@/lib/prisma");
   if (!(interaction.member instanceof GuildMember)) {
-    return await interaction.reply({
+    return await interaction.editReply({
       flags: [MessageFlags.IsComponentsV2],
       components: [errorEmbed(":x: Invalid guild")],
     });
@@ -39,13 +40,25 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
 
   const dbGuild = await getGuild(interaction.guild.id, prisma);
   if (!dbGuild.colorsEnabled) {
-    return await interaction.reply({
+    return await interaction.editReply({
       flags: [MessageFlags.IsComponentsV2],
       components: [errorEmbed(":x: Role colors are disabled in this server")],
     });
   }
 
   const role = interaction.options.getRole("role", true);
+
+  const roleExists = !!(await prisma.role.findUnique({
+    where: { id: role.id },
+  }));
+
+  if (roleExists) {
+    return await interaction.editReply({
+      flags: [MessageFlags.IsComponentsV2],
+      components: [errorEmbed(":x: This role is already registered.")],
+    });
+  }
+
   await prisma.role.create({
     data: {
         id: role.id,

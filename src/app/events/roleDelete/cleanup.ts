@@ -1,11 +1,10 @@
-import type { EventHandler } from 'commandkit';
+import type { EventHandler } from "commandkit";
 
-
-const handler: EventHandler<'roleDelete'> = async (role) => {
+const handler: EventHandler<"roleDelete"> = async (role) => {
   const { prisma } = await import("@/lib/prisma");
-  await prisma.role.delete({
-    where: { id: role.id }
-  }).catch((e) => null);
+  await prisma.role.deleteMany({
+    where: { id: role.id, guildId: role.guild.id },
+  });
 };
 
 export default handler;

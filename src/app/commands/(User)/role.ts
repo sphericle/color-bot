@@ -3,7 +3,6 @@ import { getGuild } from "@/util/guild";
 import { getMemberCustomRoles } from "@/util/member";
 import { resolveColor, getRoleColorsObj } from "@/util/colors";
 import { type ChatInputCommand, type CommandData } from "commandkit";
-import { addRoleNameVars, defaultRoleName } from "@/util/role";
 import {
   ApplicationCommandOptionType,
   Constants,
@@ -16,6 +15,7 @@ import {
   RoleEditOptions,
   TextInputBuilder,
   TextInputStyle,
+  RoleColors
 } from "discord.js";
 
 export const command: CommandData = {
@@ -43,6 +43,19 @@ export const command: CommandData = {
           name: "holographic",
           type: ApplicationCommandOptionType.Boolean,
           description: "Whether the role should have the holographic effect.",
+        },
+      ],
+    },
+    {
+      type: ApplicationCommandOptionType.Subcommand,
+      name: "copy",
+      description: "Create a new role with an existing role's colors",
+      options: [
+        {
+          name: "role",
+          type: ApplicationCommandOptionType.Role,
+          description: "The role to copy colors from.",
+          required: true,
         },
       ],
     },
@@ -78,8 +91,9 @@ export const command: CommandData = {
 };
 
 export const chatInput: ChatInputCommand = async ({ interaction }) => {
+  await interaction.deferReply();
   if (!interaction.guild) {
-    return await interaction.reply({
+    return await interaction.editReply({
       components: [
         errorEmbed(":x: This command can only be used in a server."),
       ],
@@ -89,7 +103,7 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
   const subcommand = interaction.options.getSubcommand();
   const { prisma } = await import("@/lib/prisma");
   if (!(interaction.member instanceof GuildMember)) {
-    return await interaction.reply({
+    return await interaction.editReply({
       flags: [MessageFlags.IsComponentsV2],
       components: [errorEmbed(":x: Invalid guild")],
     });
@@ -97,7 +111,7 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
 
   const dbGuild = await getGuild(interaction.guild.id, prisma);
   if (!dbGuild.colorsEnabled) {
-    return await interaction.reply({
+    return await interaction.editReply({
       flags: [MessageFlags.IsComponentsV2],
       components: [errorEmbed(":x: Role colors are disabled in this server")],
     });
@@ -113,7 +127,7 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
         )
       ).length >= 1
     ) {
-      return await interaction.reply({
+      return await interaction.editReply({
         components: [errorEmbed(":x: You already have a custom role.")],
         flags: [MessageFlags.IsComponentsV2],
       });
@@ -127,7 +141,7 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
       (!!color2 || !!holographic) &&
       !interaction.guild.features.includes("ENHANCED_ROLE_COLORS")
     ) {
-      return await interaction.reply({
+      return await interaction.editReply({
         flags: [MessageFlags.IsComponentsV2],
         components: [
           errorEmbed(`:x: This server does not have gradient roles enabled.`),
@@ -136,7 +150,7 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
     }
     const colorResolved1 = resolveColor(color1);
     if (!colorResolved1 && !holographic) {
-      return await interaction.reply({
+      return await interaction.editReply({
         components: [errorEmbed(`Invalid color: ${color1}`)],
         flags: [MessageFlags.IsComponentsV2],
       });
@@ -146,72 +160,22 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
     if (color2) {
       colorResolved2 = resolveColor(color2);
       if (colorResolved2 === null) {
-        return await interaction.reply({
+        return await interaction.editReply({
           components: [errorEmbed(`Invalid color: ${color2}`)],
           flags: [MessageFlags.IsComponentsV2],
         });
       }
     }
-    let roleName = defaultRoleName(
-      dbGuild,
-      interaction.member as unknown as GuildMember,
-      color1,
-      color2,
-      holographic,
-    );
-
-    let replyInteraction: Pick<typeof interaction, "reply"> = interaction;
-
-    if (dbGuild.roleNamesEnabled) {
-      await interaction.showModal(
-        new ModalBuilder()
-          .setCustomId("roleNameModal")
-          .setTitle("Enter Role Name")
-          .addLabelComponents(
-            new LabelBuilder()
-              .setLabel("Role Name (can be empty)")
-              .setTextInputComponent(
-                new TextInputBuilder()
-                  .setCustomId("roleNameInput")
-                  .setStyle(TextInputStyle.Paragraph)
-                  .setRequired(false)
-                  .setMaxLength(4000),
-              ),
-          ),
-      );
-
-      const submittedModalInteraction = await interaction
-        .awaitModalSubmit({
-          filter: (i) =>
-            i.customId === "roleNameModal" && i.user.id === interaction.user.id,
-          time: 300_000,
-        })
-        .catch(() => null);
-
-      if (!submittedModalInteraction) return;
-
-      replyInteraction = submittedModalInteraction;
-
-      const newName =
-        submittedModalInteraction.fields.getTextInputValue("roleNameInput");
-      if (newName)
-        roleName = addRoleNameVars(
-          newName,
-          interaction.member,
-          color1,
-          color2,
-          holographic,
-        );
-    } // role name
 
     const position =
       (dbGuild.roleBelowColors
-        ? (interaction.guild.roles.cache.get(dbGuild.roleBelowColors)?.position ?? -1) + 1
+        ? (interaction.guild.roles.cache.get(dbGuild.roleBelowColors)
+            ?.position ?? -1) + 1
         : null) ?? 0;
 
     const role = await interaction.guild.roles
       .create({
-        name: roleName,
+        name: interaction.user.username,
         position,
         colors: getRoleColorsObj(colorResolved1, colorResolved2, holographic),
         reason: `Custom role created by ${interaction.user.username} (${interaction.user.id})`,
@@ -224,7 +188,7 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
       });
 
     if (!role || role instanceof DiscordAPIError) {
-      return await replyInteraction.reply({
+      return await interaction.editReply({
         flags: [MessageFlags.IsComponentsV2],
         components: [
           errorEmbed(
@@ -243,12 +207,86 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
       },
     });
 
-    return await replyInteraction.reply({
+    return await interaction.editReply({
       flags: [MessageFlags.IsComponentsV2],
       components: [successEmbed(":white_check_mark: Role created!")],
     });
+  } else if (subcommand === "copy") {
+    if (
+      (
+        await getMemberCustomRoles(
+          interaction.guild as unknown as Guild,
+          interaction.user.id,
+          prisma,
+        )
+      ).length >= 1
+    ) {
+      return await interaction.editReply({
+        components: [errorEmbed(":x: You already have a custom role.")],
+        flags: [MessageFlags.IsComponentsV2],
+      });
+    }
+
+    const roleToCopy = interaction.options.getRole("role", true);
+    if (!("primaryColor" in roleToCopy.colors)) {
+      return await interaction.editReply({
+        components: [errorEmbed(":x: That role doesn't have any colors to copy.")],
+        flags: [MessageFlags.IsComponentsV2],
+      });
+    }
+
+    const position =
+      (dbGuild.roleBelowColors
+        ? (interaction.guild.roles.cache.get(dbGuild.roleBelowColors)
+            ?.position ?? -1) + 1
+        : null) ?? 0;
+
+    const role = await interaction.guild.roles
+      .create({
+        name: interaction.user.username,
+        position,
+        colors: {
+          primaryColor: roleToCopy.colors.primaryColor!,
+          ...(interaction.guild.features.includes("ENHANCED_ROLE_COLORS") && {
+            secondaryColor: roleToCopy.colors.secondaryColor ?? undefined,
+            tertiaryColor: roleToCopy.colors.tertiaryColor ?? undefined,
+          }),
+        },
+        reason: `Custom role created by ${interaction.user.username} (${interaction.user.id})`,
+      })
+      .catch((e) => {
+        if (e instanceof DiscordAPIError && e.code === 50013) {
+          console.error(e);
+          return e;
+        }
+      });
+
+    if (!role || role instanceof DiscordAPIError) {
+      return await interaction.editReply({
+        flags: [MessageFlags.IsComponentsV2],
+        components: [
+          errorEmbed(
+            ":x: I do not have permission to create roles or assign the role above the color roles.",
+          ),
+        ],
+      });
+    }
+
+    await interaction.member.roles.add(role.id);
+
+    await prisma.role.create({
+      data: {
+        id: role.id,
+        guildId: role.guild.id,
+      },
+    });
+
+    return await interaction.editReply({
+      flags: [MessageFlags.IsComponentsV2],
+      components: [successEmbed(":white_check_mark: Role created!")],
+    });
+
   } else if (subcommand === "edit") {
-    await interaction.deferReply();
     const roles = await getMemberCustomRoles(
       interaction.guild as unknown as Guild,
       interaction.member.id,
@@ -261,6 +299,14 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
       });
     }
     const dbRole = roles[0];
+    if (dbRole.locked) {
+      return await interaction.editReply({
+        flags: [MessageFlags.IsComponentsV2],
+        components: [
+          errorEmbed(":x: This role is locked and cannot be edited."),
+        ],
+      });
+    }
 
     const role = interaction.guild.roles.cache.get(dbRole.id);
     if (!role) {
@@ -280,7 +326,7 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
       (!!color2 || !!holographic) &&
       !interaction.guild.features.includes("ENHANCED_ROLE_COLORS")
     ) {
-      return await interaction.reply({
+      return await interaction.editReply({
         flags: [MessageFlags.IsComponentsV2],
         components: [
           errorEmbed(`:x: This server does not have gradient roles enabled.`),
@@ -319,7 +365,7 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
             },
     });
 
-    return await interaction.reply({
+    return await interaction.editReply({
       flags: [MessageFlags.IsComponentsV2],
       components: [successEmbed(":white_check_mark: Edited role!")],
     });
