@@ -125,7 +125,22 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
     const updateData: Record<string, any> = {};
 
     if (colorsEnabled !== null) updateData.colorsEnabled = colorsEnabled;
-    if (roleBelowColors) updateData.roleBelowColors = roleBelowColors.id;
+    if (roleBelowColors) {
+      const botRole = interaction.guild.members.me?.roles.highest;
+      if (!botRole) {
+        return await interaction.editReply({
+          flags: [MessageFlags.IsComponentsV2],
+          components: [errorEmbed("Could not determine bot's highest role.")],
+        });
+      }
+      if (roleBelowColors.position >= botRole.position) {
+        return await interaction.editReply({
+          flags: [MessageFlags.IsComponentsV2],
+          components: [errorEmbed("The role below colors must be below the bot's highest role.")],
+        });
+      }
+      updateData.roleBelowColors = roleBelowColors.id
+    };
     if (removeRequiredRole) {
       updateData.requiredRoleToEdit = null;
     } else if (requiredRole) {
