@@ -5,11 +5,19 @@ import {
   ApplicationCommandOptionType,
   GuildMember,
   MessageFlags,
+  PermissionFlagsBits,
+  PermissionsBitField,
 } from "discord.js";
 
 export const command: CommandData = {
   name: "register",
   description: "Register an existing role in the bot.",
+  default_member_permissions: String(
+    new PermissionsBitField([
+      PermissionFlagsBits.ManageRoles,
+      PermissionFlagsBits.ManageGuild,
+    ]).freeze().bitfield,
+  ),
   options: [
     {
       type: ApplicationCommandOptionType.Role,
