@@ -1,22 +1,14 @@
 import { errorEmbed, successEmbed } from "@/util/embeds";
-import { getGuild } from "@/util/guild";
-import { getMemberCustomRoles } from "@/util/member";
-import { resolveColor, getRoleColorsObj } from "@/util/colors";
 import { type ChatInputCommand, type CommandData } from "commandkit";
 import {
   ApplicationCommandOptionType,
-  Constants,
-  DiscordAPIError,
-  Guild,
   GuildMember,
-  LabelBuilder,
   MessageFlags,
-  ModalBuilder,
   PermissionFlagsBits,
   PermissionsBitField,
-  TextInputBuilder,
-  TextInputStyle,
 } from "discord.js";
+
+import { getGuild } from "@/util/guild";
 
 export const command: CommandData = {
   name: "staff",
@@ -62,6 +54,17 @@ export const command: CommandData = {
           type: ApplicationCommandOptionType.Role,
           description: "The role all color roles will be created above",
         },
+        {
+          name: "required_role",
+          type: ApplicationCommandOptionType.Role,
+          description:
+            "The role required to use staff commands (defaults to none)",
+        },
+        {
+          name: "remove_required_role",
+          type: ApplicationCommandOptionType.Boolean,
+          description: "Remove the role required to use staff commands",
+        }
       ],
     },
   ],
@@ -86,14 +89,14 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
 
   const { prisma } = await import("@/lib/prisma");
 
-  // const dbGuild = await getGuild(interaction.guild.id, prisma);
+  /* const dbGuild = */ await getGuild(interaction.guild.id, prisma);
 
   if (subcommand === "edit") {
     const role = interaction.options.getRole("role", true);
     const locked = interaction.options.getBoolean("locked");
 
     const dbRole = await prisma.role.findUnique({
-      where: { id: role.id },
+      where: { id: role.id, guildId: interaction.guild.id },
     })
     if (!dbRole) {
       return await interaction.editReply({
@@ -104,7 +107,7 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
     
     if (locked !== null) {
       await prisma.role.update({
-        where: { id: role.id },
+        where: { id: role.id, guildId: interaction.guild.id },
         data: { locked },
       });
     }
@@ -116,11 +119,18 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
   } else if (subcommand === "config") {
     const colorsEnabled = interaction.options.getBoolean("colors_enabled");
     const roleBelowColors = interaction.options.getRole("role_below_colors");
+    const requiredRole = interaction.options.getRole("required_role");
+    const removeRequiredRole = interaction.options.getBoolean("remove_required_role");
 
     const updateData: Record<string, any> = {};
 
     if (colorsEnabled !== null) updateData.colorsEnabled = colorsEnabled;
     if (roleBelowColors) updateData.roleBelowColors = roleBelowColors.id;
+    if (removeRequiredRole) {
+      updateData.requiredRoleToEdit = null;
+    } else if (requiredRole) {
+      updateData.requiredRoleToEdit = requiredRole.id;
+    }
 
     if (Object.keys(updateData).length > 0) {
       await prisma.guild.update({

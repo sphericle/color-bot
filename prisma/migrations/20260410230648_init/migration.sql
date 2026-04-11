@@ -2,7 +2,6 @@
 CREATE TABLE "Guild" (
     "id" TEXT NOT NULL,
     "colorsEnabled" BOOLEAN NOT NULL DEFAULT true,
-    "membersCanEditRoles" BOOLEAN NOT NULL DEFAULT true,
     "requiredRoleToEdit" TEXT,
     "roleBelowColors" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

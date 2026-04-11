@@ -9,13 +9,7 @@ import {
   DiscordAPIError,
   Guild,
   GuildMember,
-  LabelBuilder,
   MessageFlags,
-  ModalBuilder,
-  RoleEditOptions,
-  TextInputBuilder,
-  TextInputStyle,
-  RoleColors
 } from "discord.js";
 
 export const command: CommandData = {
@@ -114,6 +108,17 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
     return await interaction.editReply({
       flags: [MessageFlags.IsComponentsV2],
       components: [errorEmbed(":x: Role colors are disabled in this server")],
+    });
+  }
+  if (
+    dbGuild.requiredRoleToEdit &&
+    !interaction.member.permissions.has("ManageRoles") &&
+    !interaction.member.permissions.has("ManageGuild") &&
+    !interaction.member.roles.cache.has(dbGuild.requiredRoleToEdit)
+  ) {
+    return await interaction.editReply({
+      flags: [MessageFlags.IsComponentsV2],
+      components: [errorEmbed(":x: You do not have permission to edit roles.")],
     });
   }
 
@@ -230,7 +235,9 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
     const roleToCopy = interaction.options.getRole("role", true);
     if (!("primaryColor" in roleToCopy.colors)) {
       return await interaction.editReply({
-        components: [errorEmbed(":x: That role doesn't have any colors to copy.")],
+        components: [
+          errorEmbed(":x: That role doesn't have any colors to copy."),
+        ],
         flags: [MessageFlags.IsComponentsV2],
       });
     }
@@ -285,7 +292,6 @@ export const chatInput: ChatInputCommand = async ({ interaction }) => {
       flags: [MessageFlags.IsComponentsV2],
       components: [successEmbed(":white_check_mark: Role created!")],
     });
-
   } else if (subcommand === "edit") {
     const roles = await getMemberCustomRoles(
       interaction.guild as unknown as Guild,
