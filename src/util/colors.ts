@@ -1,7 +1,7 @@
 import { resolveColor as djsResolve, Constants } from "discord.js";
 
 export const resolveColor = (color: string): number | null => {
-  if (!color.trim() || color.trim() === "" || color.trim().length !== 6) return null; // Default to null if empty
+  if (!color.trim() || color.trim() === "") return null; // Default to null if empty
 
   const noHash = color.startsWith("#") ? color.slice(1) : color;
   if (noHash.length !== 6) return null; // Default to null if this isn't a hex code
